@@ -1,0 +1,24 @@
+[35msrc/lib/trading/chartTheme.ts[m[36m:[m[32m2[m[36m:[m * Bridges the app's shadcn CSS theme tokens into an [1;31mopenalgo-charts[m `ChartTheme`
+[35msrc/lib/trading/chartTheme.ts[m[36m:[m[32m11[m[36m:[mimport { type ChartTheme, darkTheme, lightTheme } from '[1;31mopenalgo-charts[m'
+[35msrc/lib/trading/chartTypes.tsx[m[36m:[m[32m3[m[36m:[m * groups, each type's icon, its underlying [1;31mopenalgo-charts[m series, and (for
+[35msrc/lib/trading/chartTypes.tsx[m[36m:[m[32m14[m[36m:[m} from '[1;31mopenalgo-charts[m/transform'
+[35msrc/lib/trading/drawTools.tsx[m[36m:[m[32m5[m[36m:[m * the [1;31mopenalgo-charts[m examples follow. Tool ids are the
+[35msrc/lib/trading/drawTools.tsx[m[36m:[m[32m6[m[36m:[m * [1;31mopenalgo-charts[m `draw` tier's registered ids; nothing here knows how a tool
+[35msrc/lib/trading/legend.test.ts[m[36m:[m[32m3[m[36m:[m * the pane, and onto the canvas the PNG export paints. [1;31mopenalgo-charts[m'
+[35msrc/lib/trading/legend.ts[m[36m:[m[32m6[m[36m:[m * onto the captured canvas (`terminal.ts`). [1;31mopenalgo-charts[m' `takeScreenshot()`
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m4[m[36m:[m * Owns the [1;31mopenalgo-charts[m instance, the OpenAlgo data / WS / trade feeds, and
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m37[m[36m:[m} from '[1;31mopenalgo-charts[m'
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m38[m[36m:[mimport type { LinkGroup } from '[1;31mopenalgo-charts[m'
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m39[m[36m:[mimport type { DrawingController } from '[1;31mopenalgo-charts[m/draw'
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m40[m[36m:[mimport { runTransform } from '[1;31mopenalgo-charts[m/transform'
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m575[m[36m:[m      .replace(/^[1;31mopenalgo-charts[m:\s*/i, '')
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m1083[m[36m:[m    // The gear on an indicator's legend row. [1;31mopenalgo-charts[m is canvas-only and
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m1227[m[36m:[m      '[1;31mopenalgo-charts[m/draw'
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m1476[m[36m:[m    const { registeredIndicators } = await import('[1;31mopenalgo-charts[m')
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m1486[m[36m:[m    await import('[1;31mopenalgo-charts[m/indicators')
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m1516[m[36m:[m    const { registeredIndicators, indicatorStyleInputs } = await import('[1;31mopenalgo-charts[m')
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m1535[m[36m:[m    const { registeredIndicators, indicatorDefaults } = await import('[1;31mopenalgo-charts[m')
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m1567[m[36m:[m    const { chartSettingsSchema, readChartSettings } = await import('[1;31mopenalgo-charts[m')
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m1627[m[36m:[m    const { applyChartSettings } = await import('[1;31mopenalgo-charts[m')
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m1673[m[36m:[m      const { applyChartSettings } = await import('[1;31mopenalgo-charts[m')
+[35msrc/lib/trading/terminal.ts[m[36m:[m[32m2242[m[36m:[m   * [1;31mopenalgo-charts[m' own `downloadScreenshot()` is deliberately not used. It
