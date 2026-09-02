@@ -117,7 +117,7 @@ qrcode==8.2
 referencing==0.37.0
 requests==2.34.2
 rich==13.7.1
-rpds-py==0.30.0
+rpds-py==2026.6.3
 setuptools==83.0.0
 simple-websocket==1.1.0
 simplejson==3.20.2
