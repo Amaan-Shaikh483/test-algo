@@ -34,6 +34,12 @@ from events.sandbox_events import (
 )
 
 __all__ = [
+    "PineAlertEvent",
+    "PineErrorEvent",
+    "PineEvent",
+    "PineOrderEvent",
+    "PineSignalEvent",
+    "PineStatusEvent",
     "OrderEvent",
     "OrderPlacedEvent",
     "OrderFailedEvent",
@@ -62,3 +68,13 @@ __all__ = [
     "GTTTriggeredEvent",
     "GTTExpiredEvent",
 ]
+
+# Pine strategy engine events (added with the /trading Pine editor feature)
+from events.pine_events import (
+    PineAlertEvent,
+    PineErrorEvent,
+    PineEvent,
+    PineOrderEvent,
+    PineSignalEvent,
+    PineStatusEvent,
+)

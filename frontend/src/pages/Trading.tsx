@@ -1,10 +1,11 @@
 import { LayoutGrid, Link2 as LinkIcon } from 'lucide-react'
+import { createLinkGroup, type LinkGroup } from 'openalgo-charts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navbar } from '@/components/layout/Navbar'
-import { createLinkGroup, type LinkGroup } from 'openalgo-charts'
-import { TickBox } from '@/components/trading/TickBox'
 import { ChartPane } from '@/components/trading/ChartPane'
 import { DrawingRail } from '@/components/trading/DrawingRail'
+import { PineEditor } from '@/components/trading/PineEditor'
+import { TickBox } from '@/components/trading/TickBox'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -166,6 +167,37 @@ export default function Trading() {
   const [wsUrl, setWsUrl] = useState<string | null>(null)
   const [noApiKey, setNoApiKey] = useState(false)
 
+  /* ── Pine editor dock ────────────────────────────────────────────────── */
+  const PINE_KEY = 'oa-trading-pine-open'
+  const [pineOpen, setPineOpen] = useState(() => localStorage.getItem(PINE_KEY) === '1')
+  useEffect(() => {
+    localStorage.setItem(PINE_KEY, pineOpen ? '1' : '0')
+  }, [pineOpen])
+  /**
+   * The focused pane, mirrored into state so the Pine dock re-renders when
+   * focus moves; activeRef stays the source of truth for drawing actions.
+   */
+  const [activeTerminal, setActiveTerminal] = useState<TradingTerminal | null>(null)
+  const [pineSymbol, setPineSymbol] = useState<{ symbol: string; exchange: string } | null>(null)
+  const [pineInterval, setPineInterval] = useState('5m')
+  useEffect(() => {
+    const read = () => {
+      const t = activeRef.current
+      setActiveTerminal((prev) => (prev === t ? prev : t))
+      setPineSymbol((prev) => {
+        const next = t?.currentSymbol() ?? null
+        return prev?.symbol === next?.symbol && prev?.exchange === next?.exchange ? prev : next
+      })
+      setPineInterval((prev) => {
+        const next = t?.currentInterval() ?? prev
+        return prev === next ? prev : next
+      })
+    }
+    read()
+    const timer = window.setInterval(read, 2000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   /* ── one drawing rail for every pane ─────────────────────────────────── */
   const [tool, setTool] = useState<string | null>(null)
   const [magnet, setMagnet] = useState(false)
@@ -177,6 +209,10 @@ export default function Trading() {
 
   const focusPane = useCallback((t: TradingTerminal | null) => {
     activeRef.current = t
+    setActiveTerminal(t)
+    const sym = t?.currentSymbol() ?? null
+    setPineSymbol(sym)
+    if (t) setPineInterval(t.currentInterval())
     if (t) setStats(t.drawStats())
   }, [])
   const railStats: DrawStats = { ...stats, tool, magnet }
@@ -302,6 +338,18 @@ export default function Trading() {
    * sync with, so an inviting control there would promise something it cannot
    * do; disabled with its state still readable is the honest version.
    */
+  const pineToggle = (
+    <Button
+      variant="outline"
+      size="sm"
+      className={cn('h-8 shrink-0 px-2.5 text-xs', pineOpen && 'border-primary text-primary')}
+      onClick={() => setPineOpen((v) => !v)}
+      title="Pine Script editor"
+    >
+      Pine
+    </Button>
+  )
+
   const syncOn = sync.crosshair || sync.viewport || sync.symbol
   const syncPicker = (
     <DropdownMenu>
@@ -380,53 +428,61 @@ export default function Trading() {
               onShortcut={armByShortcut}
             />
           )}
-          <div className="min-h-0 flex-1">
-          {noApiKey ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-              <p className="text-sm text-muted-foreground">No API key found for charting.</p>
-              <a href="/apikey" className="text-sm font-medium text-primary underline">
-                Generate an API key
-              </a>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1">
+              {noApiKey ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                  <p className="text-sm text-muted-foreground">No API key found for charting.</p>
+                  <a href="/apikey" className="text-sm font-medium text-primary underline">
+                    Generate an API key
+                  </a>
+                </div>
+              ) : apiKey && wsUrl ? (
+                <div
+                  className="grid h-full min-h-0 gap-2 p-2"
+                  style={{
+                    gridTemplateColumns: layout.cols,
+                    gridTemplateRows: layout.rows,
+                    gridTemplateAreas: layout.areas,
+                  }}
+                >
+                  {layout.cells.map((cell, i) => (
+                    <ChartPane
+                      key={`p${i}`}
+                      paneId={`p${i}`}
+                      apiKey={apiKey}
+                      wsUrl={wsUrl}
+                      style={{ gridArea: cell }}
+                      sharedTool={tool}
+                      sharedMagnet={magnet}
+                      onFocusPane={focusPane}
+                      onDrawStats={setStats}
+                      onToggleRail={() => setShowRail((v) => !v)}
+                      railVisible={showRail}
+                      linkGroup={linkRef.current}
+                      layoutPicker={
+                        i === 0 ? (
+                          <>
+                            {layoutPicker}
+                            {syncPicker}
+                            {pineToggle}
+                          </>
+                        ) : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Loading charting terminal…
+                </div>
+              )}
             </div>
-          ) : apiKey && wsUrl ? (
-            <div
-              className="grid h-full min-h-0 gap-2 p-2"
-              style={{
-                gridTemplateColumns: layout.cols,
-                gridTemplateRows: layout.rows,
-                gridTemplateAreas: layout.areas,
-              }}
-            >
-              {layout.cells.map((cell, i) => (
-                <ChartPane
-                  key={`p${i}`}
-                  paneId={`p${i}`}
-                  apiKey={apiKey}
-                  wsUrl={wsUrl}
-                  style={{ gridArea: cell }}
-                  sharedTool={tool}
-                  sharedMagnet={magnet}
-                  onFocusPane={focusPane}
-                  onDrawStats={setStats}
-                  onToggleRail={() => setShowRail((v) => !v)}
-                  railVisible={showRail}
-                  linkGroup={linkRef.current}
-                  layoutPicker={
-                    i === 0 ? (
-                      <>
-                        {layoutPicker}
-                        {syncPicker}
-                      </>
-                    ) : undefined
-                  }
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              Loading charting terminal…
-            </div>
-          )}
+            {pineOpen && (
+              <div className="mt-2 h-[360px] min-h-0 shrink-0 overflow-hidden rounded border">
+                <PineEditor terminal={activeTerminal} symbol={pineSymbol} interval={pineInterval} />
+              </div>
+            )}
           </div>
         </main>
       </div>

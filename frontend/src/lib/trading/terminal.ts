@@ -12,30 +12,32 @@
  * candles → on-chart order lines, right-click to place, drag to modify, ✕ to
  * cancel, real-time order stream, REST fallback) is unchanged.
  */
+
+import type { LinkGroup } from 'openalgo-charts'
 import {
   type Bar,
   BuySellButtons,
   CandleBuilder,
   compactVolume,
   createChart,
-  readChartSettings,
   type IPrimitive,
   LogoWatermark,
   type LtpEvent,
   type MarketDepth,
   OpenAlgoDataFeed,
-  tryResolveInterval,
-  withBarCache,
   OpenAlgoTradeFeed,
   OpenAlgoWsFeed,
   type PriceLine,
   ReplayController,
   type ReplayState,
+  readChartSettings,
   type SeriesApi,
+  type SeriesMarkers,
   type SeriesStyle,
   type SeriesType,
+  tryResolveInterval,
+  withBarCache,
 } from 'openalgo-charts'
-import type { LinkGroup } from 'openalgo-charts'
 import type { DrawingController } from 'openalgo-charts/draw'
 import { runTransform } from 'openalgo-charts/transform'
 
@@ -130,6 +132,31 @@ export interface SymbolView {
   quoteOnly: boolean
   productOptions: string[]
   product: string
+}
+
+/** Plot series from the Pine engine; times are epoch milliseconds. */
+export interface PinePlotPoint {
+  time: number
+  value: number | null
+}
+
+export interface PineStudyMarker {
+  time: number
+  position: 'aboveBar' | 'belowBar'
+  shape: 'triangleUp' | 'triangleDown' | 'arrowUp' | 'arrowDown' | 'circle' | 'square'
+  color: string
+  text?: string
+  size?: 'tiny' | 'small' | 'medium' | 'big'
+}
+
+/** Everything the Pine runtime produced for one script, chart-ready. */
+export interface PineStudyPayload {
+  id: string
+  title: string
+  overlay: boolean
+  plots: { id: string; title: string; color: string | null; data: PinePlotPoint[] }[]
+  markers: PineStudyMarker[]
+  hlines: { price: number; title: string; color: string | null }[]
 }
 
 export interface SearchRow {
@@ -366,6 +393,9 @@ function nextPaint(): Promise<void> {
   })
 }
 
+/** Rotation used when a Pine plot carries no explicit colour. */
+const PINE_PLOT_COLORS = ['#2962ff', '#089981', '#ff9800', '#9c27b0', '#e91e63', '#00897b']
+
 export class TradingTerminal {
   private readonly apiKey: string
   private readonly wsUrl: string
@@ -410,6 +440,11 @@ export class TradingTerminal {
     | null = null
   private ltpLine: PriceLine | null = null
   private posLine: PriceLine | null = null
+  /* Pine study state: rebuilt with the chart, cleared on remove. */
+  private pinePayload: PineStudyPayload | null = null
+  private pineSeries: SeriesApi[] = []
+  private pineLines: PriceLine[] = []
+  private pineMarkers: InstanceType<typeof SeriesMarkers> | null = null
   private tradeBtns: BuySellButtonsInstance | null = null
   /** The bar the OHLC readout is currently showing; replayed into the export. */
   private legendBar: Bar | null = null
@@ -1092,6 +1127,108 @@ export class TradingTerminal {
     this.chart.on('paneRemoved', () => this.placeWatermark())
     // Scrolling back past the loaded range pages in older bars.
     this.chart.setHistoryLoader(() => void this.loadOlderHistory())
+
+    // A rebuild threw the old chart away; bring the Pine study back with it.
+    this.applyPineStudy()
+  }
+
+  /* Context for the Pine panel: what this pane is looking at right now. */
+  currentInterval(): string {
+    return this.interval
+  }
+
+  currentSymbol(): { symbol: string; exchange: string } | null {
+    return this.sym ? { symbol: this.sym.symbol, exchange: this.sym.exchange } : null
+  }
+
+  /* ── Pine studies (plots + markers from the Pine engine) ──────────────── */
+
+  /**
+   * Render a Pine study on this chart: plot() series, hline() levels and
+   * BUY/SELL / plotshape markers. The payload is kept on the terminal so a
+   * chart rebuild (theme, chart type) re-applies it — the same pattern the
+   * chart settings and drawings use to survive rebuilds.
+   */
+  addPineStudy(payload: PineStudyPayload): void {
+    this.pinePayload = payload
+    this.applyPineStudy()
+  }
+
+  removePineStudy(): void {
+    this.pinePayload = null
+    this.clearPineStudy()
+  }
+
+  private clearPineStudy(): void {
+    for (const s of this.pineSeries) {
+      try {
+        s.remove()
+      } catch {
+        /* series already gone with the chart */
+      }
+    }
+    this.pineSeries = []
+    for (const l of this.pineLines) {
+      try {
+        this.chart?.removePrimitive(l)
+      } catch {
+        /* line already gone */
+      }
+    }
+    this.pineLines = []
+    if (this.pineMarkers) {
+      try {
+        this.pineMarkers.setMarkers([])
+      } catch {
+        /* chart already gone */
+      }
+      this.pineMarkers = null
+    }
+  }
+
+  private applyPineStudy(): void {
+    this.clearPineStudy()
+    const payload = this.pinePayload
+    if (!payload || !this.chart || !this.price) return
+
+    const paneIndex = payload.overlay ? 0 : 1
+    payload.plots.forEach((plot, i) => {
+      const series = this.chart!.addSeries('line', {
+        paneIndex,
+        style: { color: plot.color || PINE_PLOT_COLORS[i % PINE_PLOT_COLORS.length] },
+      })
+      series.setData(
+        plot.data
+          .filter((p): p is { time: number; value: number } => p.value != null)
+          .map((p) => ({ time: Math.round(p.time / 1000), value: p.value }))
+      )
+      this.pineSeries.push(series)
+    })
+
+    for (const level of payload.hlines) {
+      const line = this.chart.addPriceLine(
+        {
+          price: level.price,
+          color: level.color || '#787b86',
+          lineWidth: 1,
+          dashed: true,
+          id: `pine-hline-${level.price}`,
+        },
+        0
+      )
+      this.pineLines.push(line)
+    }
+
+    if (payload.markers.length) {
+      this.pineMarkers = this.price.createMarkers()
+      this.pineMarkers.setMarkers(
+        payload.markers.map((m) => ({
+          ...m,
+          size: m.size ?? 'small',
+          time: Math.round(m.time / 1000),
+        }))
+      )
+    }
   }
 
   /**
@@ -2469,6 +2606,10 @@ export class TradingTerminal {
   }
 
   destroy() {
+    this.pinePayload = null
+    this.pineSeries = []
+    this.pineLines = []
+    this.pineMarkers = null
     this.destroyed = true
     this.detachDrawing()
     if (this.bookTimer) clearInterval(this.bookTimer)

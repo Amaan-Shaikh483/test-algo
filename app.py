@@ -79,6 +79,7 @@ from blueprints.master_contract_status import (
 from blueprints.oiprofile import oiprofile_bp  # Import the OI Profile blueprint
 from blueprints.oitracker import oitracker_bp  # Import the OI tracker blueprint
 from blueprints.orders import orders_bp
+from blueprints.pine import pine_bp  # Import the Pine strategy engine blueprint
 from blueprints.platforms import platforms_bp
 from blueprints.playground import playground_bp  # Import the API playground blueprint
 from blueprints.pnltracker import pnltracker_bp  # Import the pnl tracker blueprint
@@ -120,6 +121,7 @@ from database.flow_db import init_db as ensure_flow_tables_exists
 from database.historify_db import init_database as ensure_historify_tables_exists
 from database.latency_db import init_latency_db as ensure_latency_tables_exists
 from database.leverage_db import init_db as ensure_leverage_tables_exists
+from database.pine_db import init_db as ensure_pine_tables_exists
 from database.sandbox_db import init_db as ensure_sandbox_tables_exists
 from database.scalping_db import init_db as ensure_scalping_tables_exists
 from database.settings_db import init_db as ensure_settings_tables_exists
@@ -311,6 +313,7 @@ def create_app():
     app.register_blueprint(chart_test_bp)  # Register standalone chart test page (dev/testing only)
     app.register_blueprint(pnltracker_bp)  # Register PnL tracker blueprint
     app.register_blueprint(python_strategy_bp)  # Register Python strategy blueprint
+    app.register_blueprint(pine_bp)  # Register Pine strategy engine blueprint
     app.register_blueprint(telegram_bp)  # Register Telegram blueprint
     app.register_blueprint(whatsapp_bp)  # Register WhatsApp blueprint
     app.register_blueprint(security_bp)  # Register Security blueprint
@@ -737,6 +740,7 @@ def setup_environment(app):
                 ("Scalping DB", ensure_scalping_tables_exists),
                 ("Leverage DB", ensure_leverage_tables_exists),
                 ("Strategy Portfolio DB", ensure_strategy_portfolio_tables_exists),
+                ("Pine DB", ensure_pine_tables_exists),
                 # Created here, not left to APScheduler's own CREATE TABLE in
                 # scheduler.start(). That DDL would otherwise run further down
                 # this function, after db_ready releases the rest of the boot,
@@ -837,6 +841,17 @@ def setup_environment(app):
                 restore_price_alerts()
             except Exception:
                 logger.exception("Failed to restore Flow price alerts")
+
+            # Resume Pine strategy instances that were RUNNING before the
+            # restart. Recovery re-warms indicator state from history; the
+            # bar-time guard and signal idempotency keys make sure the last
+            # signal before the restart is never executed twice.
+            try:
+                from services.pine_strategy_service import restore_pine_strategies
+
+                restore_pine_strategies()
+            except Exception:
+                logger.exception("Failed to restore Pine strategy instances")
 
             try:
                 from services.flow_scheduler_service import reconcile_scheduler_jobs

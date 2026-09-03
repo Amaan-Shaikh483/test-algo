@@ -6,6 +6,7 @@ Call register_all() once during app initialization.
 
 from subscribers import (
     log_subscriber,
+    pine_subscriber,
     socketio_subscriber,
     telegram_subscriber,
     whatsapp_subscriber,
@@ -152,5 +153,15 @@ def register_all():
         socketio_subscriber.on_sandbox_t1_settlement,
         "socketio:sandbox_t1_settlement",
     )
+
+    # --- Pine strategy engine events (server-side runtime -> trading UI) ---
+    # Only the socketio subscriber is wired: these are engine-driven state
+    # changes surfaced in the /trading Pine panel; the order pipeline already
+    # logs through order.placed / order.failed when it places real orders.
+    bus.subscribe("pine.signal", pine_subscriber.on_pine_signal, "socketio:pine_signal")
+    bus.subscribe("pine.alert", pine_subscriber.on_pine_alert, "socketio:pine_alert")
+    bus.subscribe("pine.status", pine_subscriber.on_pine_status, "socketio:pine_status")
+    bus.subscribe("pine.order", pine_subscriber.on_pine_order, "socketio:pine_order")
+    bus.subscribe("pine.error", pine_subscriber.on_pine_error, "socketio:pine_error")
 
     logger.debug("EventBus: all subscribers registered")
