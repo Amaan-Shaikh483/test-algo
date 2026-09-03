@@ -198,28 +198,57 @@ interface ApiEnvelope {
 /**
  * All /pine calls go through the session-authenticated webClient, matching
  * every other /api-adjacent page in the app. Errors are normalised into
- * thrown Errors so the editor can show one uniform message shape.
+ * thrown Errors so the editor always shows a readable message. HTTP error
+ * responses (400/500) reject at the axios layer before `res.data` is read,
+ * and the shared interceptor only surfaces `message`, never our
+ * `{error: {line, column, message}}` body, so those are unpacked here too.
  */
 async function request<T>(
   method: 'get' | 'post' | 'put' | 'delete',
   url: string,
   body?: unknown
 ): Promise<T> {
-  const res = await webClient.request<T & ApiEnvelope>({
-    method,
-    url,
-    data: body,
-  })
-  const data = res.data as ApiEnvelope
-  if (data.status === 'error') {
-    const err = data.error
-    if (err && typeof err === 'object' && 'message' in (err as Record<string, unknown>)) {
-      const e = err as unknown as PineCompileError
-      throw new Error(`Line ${e.line}:${e.column} - ${e.message}`)
-    }
-    throw new Error(typeof err === 'string' && err ? err : (data.message ?? 'Request failed'))
+  let payload: unknown
+  try {
+    const res = await webClient.request<T & ApiEnvelope>({
+      method,
+      url,
+      data: body,
+    })
+    payload = res.data
+  } catch (e) {
+    const bodyData = (e as { response?: { data?: unknown } }).response?.data
+    throw normalizeError(bodyData, (e as Error).message)
   }
-  return res.data as T
+  const data = payload as ApiEnvelope
+  if (data && data.status === 'error') {
+    throw normalizeError(data, 'Request failed')
+  }
+  return payload as T
+}
+
+function normalizeError(payload: unknown, fallback: string): Error {
+  if (typeof payload === 'string' && payload) {
+    // HTML from a redirect or proxy: keep it short rather than useful.
+    return new Error(
+      payload
+        .replace(/<[^>]*>/g, '')
+        .trim()
+        .slice(0, 200) || fallback
+    )
+  }
+  const data = payload as { message?: string; error?: unknown } | null | undefined
+  if (!data) return new Error(fallback)
+  const err = data.error
+  if (err && typeof err === 'object') {
+    const e = err as PineCompileError
+    if (e.message) {
+      return new Error(e.line ? `Line ${e.line}:${e.column} - ${e.message}` : e.message)
+    }
+  }
+  if (typeof err === 'string' && err) return new Error(err)
+  if (data.message) return new Error(data.message)
+  return new Error(fallback)
 }
 
 export const pineApi = {

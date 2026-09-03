@@ -43,6 +43,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 from pine.backtest import run_backtest
 from pine.compiler import compile_script
@@ -974,17 +975,19 @@ def evaluate_script(
     if not result.ok:
         return False, {"error": result.error.to_dict()}
 
-    class _Instance:
-        """Minimal duck-typed instance for _load_history."""
-
-        id = "evaluate"
-        user_id = "evaluate"
-        name = result.title
-        symbol = symbol
-        exchange = exchange
-        timeframe = timeframe
-
-    bars = manager._load_history(_Instance(), api_key)
+    # SimpleNamespace, not a class body: `symbol = symbol` inside a class body
+    # resolves against the not-yet-bound class attribute and raises NameError,
+    # which the app-wide 500 handler turns into a redirect - the browser then
+    # shows a generic "Evaluation failed" with nothing in the console.
+    instance = SimpleNamespace(
+        id="evaluate",
+        user_id="evaluate",
+        name=result.title,
+        symbol=symbol,
+        exchange=exchange,
+        timeframe=timeframe,
+    )
+    bars = manager._load_history(instance, api_key)
     if bars is None:
         return False, {"error": {"type": "compile_error", "line": 0, "column": 0,
                                  "message": "No historical data available for this symbol/exchange/timeframe"}}
@@ -1016,15 +1019,17 @@ def backtest_script(
     if not result.ok:
         return False, {"error": result.error.to_dict()}
 
-    class _Instance:
-        id = "backtest"
-        user_id = "backtest"
-        name = result.title
-        symbol = symbol
-        exchange = exchange
-        timeframe = timeframe
-
-    bars = manager._load_history(_Instance(), api_key)
+    # Same SimpleNamespace fix as evaluate_script: a class body assigning
+    # `symbol = symbol` reads its own (unbound) attribute and raises NameError.
+    instance = SimpleNamespace(
+        id="backtest",
+        user_id="backtest",
+        name=result.title,
+        symbol=symbol,
+        exchange=exchange,
+        timeframe=timeframe,
+    )
+    bars = manager._load_history(instance, api_key)
     if bars is None:
         return False, {"error": {"type": "compile_error", "line": 0, "column": 0,
                                  "message": "No historical data available for this symbol/exchange/timeframe"}}
@@ -1061,9 +1066,23 @@ def backtest_script(
     return True, output
 
 
-def _runtime_payload(runtime: PineRuntime, bars: list[Bar]) -> dict:
-    """Chart-ready serialization of a runtime result."""
-    from pine.runtime import NA
+def _runtime_payload(runtime, bars: list[Bar]) -> dict:
+    """Chart-ready serialization of a runtime result.
+
+    Accepts either a live ``PineRuntime`` (evaluate path, which keeps trades
+    and position on the simulator) or the ``RuntimeResult`` snapshot the
+    backtester returns (flat fields), so both render identically.
+    """
+    from pine.runtime import NA, RuntimeResult
+
+    if isinstance(runtime, RuntimeResult):
+        trades = runtime.trades
+        position_size = runtime.position_size
+        position_avg_price = runtime.position_avg_price
+    else:
+        trades = runtime.sim.trades
+        position_size = runtime.sim.position
+        position_avg_price = runtime.sim.avg_price
 
     def clean(value):
         return None if value is NA or value is None else value
@@ -1121,7 +1140,7 @@ def _runtime_payload(runtime: PineRuntime, bars: list[Bar]) -> dict:
             "pnl": round(trade.pnl, 2),
             "exit_reason": trade.exit_reason,
         }
-        for trade in runtime.trades
+        for trade in trades
     ]
     alerts = [
         {
@@ -1140,6 +1159,6 @@ def _runtime_payload(runtime: PineRuntime, bars: list[Bar]) -> dict:
         "trades": trades,
         "alerts": alerts,
         "bars_processed": len(bars),
-        "position_size": runtime.sim.position,
-        "position_avg_price": runtime.sim.avg_price,
+        "position_size": position_size,
+        "position_avg_price": position_avg_price,
     }

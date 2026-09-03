@@ -119,7 +119,18 @@ def evaluate_pine():
     if not api_key:
         return jsonify({"status": "error", "message": "No API key configured for this account"}), 400
 
-    ok, payload = evaluate_script(code, symbol, exchange, timeframe, api_key, inputs)
+    try:
+        ok, payload = evaluate_script(code, symbol, exchange, timeframe, api_key, inputs)
+    except Exception:
+        # Never let the app-wide 500 handler answer this POST with a redirect:
+        # the browser would follow it to an HTML page and the editor could only
+        # show a generic "Evaluation failed". Surface the real reason instead.
+        logger.exception("Pine evaluation failed")
+        return jsonify({
+            "status": "error",
+            "error": {"type": "runtime_error", "line": 0, "column": 0,
+                      "message": "Evaluation failed on the server - check the server log"},
+        }), 500
     if not ok:
         return jsonify({"status": "error", **payload}), 400
     return jsonify({"status": "success", **payload})
@@ -151,7 +162,17 @@ def backtest_pine():
     if not api_key:
         return jsonify({"status": "error", "message": "No API key configured for this account"}), 400
 
-    ok, payload = backtest_script(code, symbol, exchange, timeframe, api_key, inputs, config)
+    try:
+        ok, payload = backtest_script(code, symbol, exchange, timeframe, api_key, inputs, config)
+    except Exception:
+        # Same as evaluate: a redirect here reads as a bare "Backtest failed"
+        # in the editor, with the actual traceback only in the server log.
+        logger.exception("Pine backtest failed")
+        return jsonify({
+            "status": "error",
+            "error": {"type": "runtime_error", "line": 0, "column": 0,
+                      "message": "Backtest failed on the server - check the server log"},
+        }), 500
     if not ok:
         return jsonify({"status": "error", **payload}), 400
 
