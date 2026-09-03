@@ -218,7 +218,11 @@ class Lexer:
                 word = raw_line[i:j]
                 i = j
 
-                if word in UNSUPPORTED_KEYWORDS and not self._is_qualified_name(word):
+                if (
+                    word in UNSUPPORTED_KEYWORDS
+                    and not self._is_qualified_name(word)
+                    and not self._is_call_position(word, raw_line, i)
+                ):
                     raise PineError(
                         kind="unsupported_feature",
                         line=line_no,
@@ -258,6 +262,24 @@ class Lexer:
                 # e.g. `ta` immediately before this word -> qualified member
                 return True
             return False
+        return False
+
+    def _is_call_position(self, word: str, raw_line: str, i: int) -> bool:
+        """True when a reserved word is being used as the input() function.
+
+        ``input`` sits in UNSUPPORTED_KEYWORDS because ``input int x = 1``
+        (the type qualifier) is not supported. But ``input(...)`` and the
+        ``input.int(...)`` family are supported calls, so a word directly
+        followed by ``(`` or ``.`` is a call position, not the qualifier.
+        Only ``input`` gets this exemption; ``for``/``varip``/``type`` are
+        never function names in this engine.
+        """
+        if word != "input":
+            return False
+        j = i
+        while j < len(raw_line) and raw_line[j] in (" ", "\t"):
+            j += 1
+        return j < len(raw_line) and raw_line[j] in ("(", ".")
         return False
 
     def _lex_string(self, line: str, start: int, line_no: int) -> tuple[Token, int]:

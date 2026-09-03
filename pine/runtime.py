@@ -519,18 +519,38 @@ class StrategySim:
             return
         if direction == "short" and not self.config.short_enabled:
             return
-        # A same-direction entry while already positioned in that direction is
-        # a no-op in TradingView unless qty increases; keep the simple rule:
-        # replace pending same-id order, otherwise queue the reversal/entry.
+        # pyramiding=0 (the TradingView default this engine models): an entry
+        # in a direction already positioned is a no-op, not an add. A reversal
+        # (opposite direction) still queues and closes at fill.
+        if self.position > 0 and direction == "long":
+            return
+        if self.position < 0 and direction == "short":
+            return
+        # Replace a pending order with the same id: the latest intent wins.
         self.pending = [p for p in self.pending if p.order_id != order_id]
         self.pending.append(
             _PendingOrder(order_id, "entry", direction, qty, "entry", comment)
         )
 
-    def submit_close(self, order_id: str, comment: str, from_entry: str | None = None) -> None:
-        self.pending.append(
-            _PendingOrder(order_id, "close", "", 0.0, "close", comment, from_entry)
-        )
+    def submit_close(
+        self, order_id: str, comment: str, from_entry: str | None = None
+    ) -> "_PendingOrder | None":
+        """Queue a close; a no-op (returning None) when nothing matches.
+
+        TradingView silently ignores strategy.close() calls for entries that
+        are not open; emitting a signal for them would place live SELL orders
+        while flat, so the guard lives here, not at fill time.
+        """
+        if from_entry is not None:
+            # entries is keyed by direction; match the close against the
+            # entry ids it actually targets (same rule _fill_close applies).
+            if from_entry not in {e.entry_id for e in self.entries.values()}:
+                return None
+        elif not self.entries:
+            return None
+        order = _PendingOrder(order_id, "close", "", 0.0, "close", comment, from_entry)
+        self.pending.append(order)
+        return order
 
     def set_exit(
         self,
@@ -626,15 +646,8 @@ class StrategySim:
         if qty <= 0:
             return fills
         if order.direction in self.entries:
-            # Same-direction re-entry: merge quantities at the weighted average.
-            existing = self.entries[order.direction]
-            total = existing.qty + qty
-            existing.entry_price = (
-                existing.entry_price * existing.qty + price * qty
-            ) / total
-            existing.qty = total
-            self.avg_price = existing.entry_price
-            self.position = total if order.direction == "long" else -total
+            # Same-direction re-entry with pyramiding=0: ignored, the open
+            # position is untouched (TradingView's default behaviour).
             return fills
         entry = _OpenPosition(
             entry_id=order.order_id,
@@ -1664,7 +1677,12 @@ class PineRuntime:
         key = id(call)
         if key not in self._call_state:
             color = self._resolve_color(call, scope)
-            title = self._literal_kwarg(call, "title") or f"Plot {len(self.plots) + 1}"
+            # Pine's plot(series, title, ...) carries the legend title as the
+            # second positional argument; title= is the equivalent kwarg.
+            title = self._literal_kwarg(call, "title")
+            if title is None and len(values) > 1 and isinstance(values[1], str):
+                title = values[1]
+            title = title or f"Plot {len(self.plots) + 1}"
             output = PlotOutput(id=f"plot-{key}", title=str(title), color=color)
             self._call_state[key] = output
             self.plots.append(output)
@@ -1750,7 +1768,20 @@ class PineRuntime:
 
     # -- strategy orders ------------------------------------------------------------------
 
+    def _when_satisfied(self, call, scope) -> bool:
+        """Evaluate the ``when=`` guard Pine's order functions accept.
+
+        strategy.entry/close/close_all/exit only act when the condition is
+        true; ``na`` counts as false. Without this guard every bar submits a
+        fresh order, which floods the signal log (and the chart markers) with
+        one entry/close pair per bar.
+        """
+        when = self._kwarg(call, "when", scope, True)
+        return _truthy(when, call)
+
     def _bi_strategy_entry(self, call, scope):
+        if not self._when_satisfied(call, scope):
+            return NA
         values = self._args(call, scope)
         order_id = str(values[0])
         direction = values[1] if len(values) > 1 else self._kwarg(call, "direction")
@@ -1772,6 +1803,8 @@ class PineRuntime:
         return NA
 
     def _bi_strategy_close(self, call, scope):
+        if not self._when_satisfied(call, scope):
+            return NA
         values = self._args(call, scope)
         entry_id = str(values[0])
         comment = self._kwarg(call, "comment", scope, "") or ""
@@ -1780,14 +1813,19 @@ class PineRuntime:
         return NA
 
     def _bi_strategy_close_all(self, call, scope):
+        if not self._when_satisfied(call, scope):
+            return NA
         comment = self._kwarg(call, "comment", scope, "") or ""
         order_id = f"close-all-{self.sim.next_id()}"
-        self.sim.submit_close(order_id, str(comment), from_entry=None)
+        order = self.sim.submit_close(order_id, str(comment), from_entry=None)
         # close-all matches every open entry
-        self.sim.pending[-1].source = "close_all"
+        if order is not None:
+            order.source = "close_all"
         return NA
 
     def _bi_strategy_exit(self, call, scope):
+        if not self._when_satisfied(call, scope):
+            return NA
         values = self._args(call, scope)
         exit_id = str(values[0]) if values else "exit"
         from_entry = self._arg(call, scope, 1, "from_entry")

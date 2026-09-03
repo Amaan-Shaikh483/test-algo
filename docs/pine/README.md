@@ -53,7 +53,10 @@ after it closes (confirmed-candle model), which kills intrabar duplicates.
 - Operators: arithmetic, comparison, logical `and/or/not`, ternary `?:`
 - Variables, reassignment, `var` initialisers, `if` / `else` blocks
 - `plot()`, `plotshape()`, `hline()`
-- `strategy.entry()`, `strategy.close()`, `strategy.exit()` (stop/limit)
+- `strategy.entry()`, `strategy.close()`, `strategy.exit()` (stop/limit) —
+  including the `when=` guard on all order functions
+- `color.new()`, `color.rgb()` and the `color.*` / `shape.*` / `location.*`
+  constant families
 - `alertcondition()`, `alert()`
 
 Anything outside the subset (e.g. `request.security()`, `array.*`,

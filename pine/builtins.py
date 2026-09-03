@@ -80,6 +80,8 @@ _register(BuiltinSpec("nz", 1, 2))
 
 # Inputs --------------------------------------------------------------------
 _register(BuiltinSpec("input", 1, 3))
+_register(BuiltinSpec("color.new", 2, 2))
+_register(BuiltinSpec("color.rgb", 3, 4))
 _register(BuiltinSpec("input.int", 1, 6))
 _register(BuiltinSpec("input.float", 1, 6))
 _register(BuiltinSpec("input.bool", 1, 5))
@@ -204,8 +206,6 @@ UNSUPPORTED_FEATURES: set[str] = {
     "plotarrow",
     "barcolor",
     "fill",
-    "color.new",
-    "color.rgb",
     "str.format",
     "str.tostring",
     "str.tonumber",
