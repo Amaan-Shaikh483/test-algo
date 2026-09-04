@@ -40,6 +40,7 @@ need → drill into the specific file. Don't load everything at once.
 |---|---|
 | Scalping Terminal (`/scalping`) | [scalping/PRD.md](scalping/PRD.md) |
 | Pine Script strategy engine (`/trading`) | [pine/README.md](pine/README.md) |
+| Alerts + webhooks (`/trading`) | [alerts/README.md](alerts/README.md) |
 | Scanner architecture | [scanner-architecture.md](scanner-architecture.md) |
 | WhatsApp alerts | [whatsapp.md](whatsapp.md) |
 | Telegram chart rendering | [telegram-chart-rendering.md](telegram-chart-rendering.md) |

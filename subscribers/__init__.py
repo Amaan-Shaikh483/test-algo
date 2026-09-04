@@ -5,6 +5,7 @@ Call register_all() once during app initialization.
 """
 
 from subscribers import (
+    alert_subscriber,
     log_subscriber,
     pine_subscriber,
     socketio_subscriber,
@@ -159,6 +160,13 @@ def register_all():
     # changes surfaced in the /trading Pine panel; the order pipeline already
     # logs through order.placed / order.failed when it places real orders.
     bus.subscribe("pine.signal", pine_subscriber.on_pine_signal, "socketio:pine_signal")
+    # Alert engine consumes the same pine.signal events for strategy alerts
+    # (Pine runtime never calls webhooks itself) and emits its own topics.
+    from services.alert_engine import alert_engine
+
+    bus.subscribe("pine.signal", alert_engine.handle_pine_signal, "alerts:pine_signal")
+    bus.subscribe("alert.triggered", alert_subscriber.on_alert_triggered, "socketio:alert_triggered")
+    bus.subscribe("alert.delivery", alert_subscriber.on_alert_delivery, "socketio:alert_delivery")
     bus.subscribe("pine.alert", pine_subscriber.on_pine_alert, "socketio:pine_alert")
     bus.subscribe("pine.status", pine_subscriber.on_pine_status, "socketio:pine_status")
     bus.subscribe("pine.order", pine_subscriber.on_pine_order, "socketio:pine_order")

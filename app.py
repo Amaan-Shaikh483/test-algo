@@ -48,6 +48,7 @@ from flask import Flask, session
 from flask_wtf.csrf import CSRFProtect  # Import CSRF protection
 
 from blueprints.admin import admin_bp  # Import the admin blueprint
+from blueprints.alerts import alerts_bp  # Import the Alert + Webhook system blueprint
 from blueprints.analyzer import analyzer_bp  # Import the analyzer blueprint
 from blueprints.apikey import api_key_bp
 from blueprints.arbitrage import arbitrage_bp  # Import the Arbitrage blueprint
@@ -112,6 +113,7 @@ from blueprints.whatsapp import whatsapp_bp  # Import the WhatsApp blueprint
 from cors import init_cors
 from csp import apply_csp_middleware  # Import the CSP middleware
 from database.action_center_db import init_db as ensure_action_center_tables_exists
+from database.alert_db import init_db as ensure_alert_tables_exists
 from database.analyzer_db import init_db as ensure_analyzer_tables_exists
 from database.apilog_db import init_db as ensure_api_log_tables_exists
 from database.apscheduler_jobstore_db import ensure_jobstore_tables_exist
@@ -314,6 +316,7 @@ def create_app():
     app.register_blueprint(pnltracker_bp)  # Register PnL tracker blueprint
     app.register_blueprint(python_strategy_bp)  # Register Python strategy blueprint
     app.register_blueprint(pine_bp)  # Register Pine strategy engine blueprint
+    app.register_blueprint(alerts_bp)  # Register Alert + Webhook system blueprint
     app.register_blueprint(telegram_bp)  # Register Telegram blueprint
     app.register_blueprint(whatsapp_bp)  # Register WhatsApp blueprint
     app.register_blueprint(security_bp)  # Register Security blueprint
@@ -741,6 +744,7 @@ def setup_environment(app):
                 ("Leverage DB", ensure_leverage_tables_exists),
                 ("Strategy Portfolio DB", ensure_strategy_portfolio_tables_exists),
                 ("Pine DB", ensure_pine_tables_exists),
+                ("Alert DB", ensure_alert_tables_exists),
                 # Created here, not left to APScheduler's own CREATE TABLE in
                 # scheduler.start(). That DDL would otherwise run further down
                 # this function, after db_ready releases the rest of the boot,
@@ -852,6 +856,15 @@ def setup_environment(app):
                 restore_pine_strategies()
             except Exception:
                 logger.exception("Failed to restore Pine strategy instances")
+
+            # Alert + Webhook system: reload ACTIVE alerts so they keep working
+            # while the browser/editor is closed (server-side persistence).
+            try:
+                from services.alert_engine import alert_engine
+
+                alert_engine.start()
+            except Exception:
+                logger.exception("Failed to restore alerts")
 
             try:
                 from services.flow_scheduler_service import reconcile_scheduler_jobs

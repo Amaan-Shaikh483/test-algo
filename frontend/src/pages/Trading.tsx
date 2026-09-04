@@ -2,6 +2,7 @@ import { LayoutGrid, Link2 as LinkIcon } from 'lucide-react'
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navbar } from '@/components/layout/Navbar'
+import { AlertPanel } from '@/components/trading/AlertPanel'
 import { ChartPane } from '@/components/trading/ChartPane'
 import { DrawingRail } from '@/components/trading/DrawingRail'
 import { PineEditor } from '@/components/trading/PineEditor'
@@ -170,6 +171,7 @@ export default function Trading() {
   /* ── Pine editor dock ────────────────────────────────────────────────── */
   const PINE_KEY = 'oa-trading-pine-open'
   const [pineOpen, setPineOpen] = useState(() => localStorage.getItem(PINE_KEY) === '1')
+  const [alertsOpen, setAlertsOpen] = useState(false)
   useEffect(() => {
     localStorage.setItem(PINE_KEY, pineOpen ? '1' : '0')
   }, [pineOpen])
@@ -339,15 +341,26 @@ export default function Trading() {
    * do; disabled with its state still readable is the honest version.
    */
   const pineToggle = (
-    <Button
-      variant="outline"
-      size="sm"
-      className={cn('h-8 shrink-0 px-2.5 text-xs', pineOpen && 'border-primary text-primary')}
-      onClick={() => setPineOpen((v) => !v)}
-      title="Pine Script editor"
-    >
-      Pine
-    </Button>
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className={cn('h-8 shrink-0 px-2.5 text-xs', pineOpen && 'border-primary text-primary')}
+        onClick={() => setPineOpen((v) => !v)}
+        title="Pine Script editor"
+      >
+        Pine
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className={cn('h-8 shrink-0 px-2.5 text-xs', alertsOpen && 'border-primary text-primary')}
+        onClick={() => setAlertsOpen((v) => !v)}
+        title="Alerts and webhooks"
+      >
+        Alert
+      </Button>
+    </>
   )
 
   const syncOn = sync.crosshair || sync.viewport || sync.symbol
@@ -478,6 +491,11 @@ export default function Trading() {
                 </div>
               )}
             </div>
+            {alertsOpen && (
+              <div className="mt-2 h-[320px] min-h-0 shrink-0 overflow-hidden rounded border">
+                <AlertPanel symbol={pineSymbol} interval={pineInterval} />
+              </div>
+            )}
             {pineOpen && (
               <div className="mt-2 h-[360px] min-h-0 shrink-0 overflow-hidden rounded border">
                 <PineEditor terminal={activeTerminal} symbol={pineSymbol} interval={pineInterval} />
