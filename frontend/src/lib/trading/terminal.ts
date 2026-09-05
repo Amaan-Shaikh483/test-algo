@@ -822,6 +822,12 @@ export class TradingTerminal {
     return this.sym.lots ? `${n}L` : String(n)
   }
 
+  /** Live price of the loaded instrument (LTP, else last bar close).
+   * Used by dialogs (e.g. Create Alert) to prefill the current price. */
+  getLastPrice(): number | null {
+    return this.marketPrice()
+  }
+
   private marketPrice(): number | null {
     return this.lastLtp != null
       ? this.lastLtp

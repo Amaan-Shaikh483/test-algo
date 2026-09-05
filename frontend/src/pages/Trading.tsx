@@ -493,7 +493,7 @@ export default function Trading() {
             </div>
             {alertsOpen && (
               <div className="mt-2 h-[320px] min-h-0 shrink-0 overflow-hidden rounded border">
-                <AlertPanel symbol={pineSymbol} interval={pineInterval} />
+                <AlertPanel symbol={pineSymbol} interval={pineInterval} terminal={activeTerminal} />
               </div>
             )}
             {pineOpen && (

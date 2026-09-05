@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import type { TradingTerminal } from '@/lib/trading/terminal'
 
 const OPERATOR_LABELS: Record<string, string> = {
   crossing: 'Crossing',
@@ -49,6 +50,7 @@ const STATUS_STYLES: Record<string, string> = {
 interface AlertPanelProps {
   symbol: { symbol: string; exchange: string } | null
   interval: string
+  terminal?: TradingTerminal | null
 }
 
 function formatTime(value: string | null): string {
@@ -72,12 +74,14 @@ function CreateAlertDialog({
   onCreated,
   symbol,
   interval,
+  terminal,
 }: {
   open: boolean
   onClose: () => void
   onCreated: () => void
   symbol: { symbol: string; exchange: string } | null
   interval: string
+  terminal?: TradingTerminal | null
 }) {
   const queryClient = useQueryClient()
   const [sourceType, setSourceType] = useState<AlertSourceType>('price')
@@ -102,6 +106,27 @@ function CreateAlertDialog({
       setStrategyId(strategies[0].id)
     }
   }, [open, sourceType, strategies, strategyId])
+
+  // Prefill Value with the open chart's current price (LTP, else last close).
+  // Retries briefly while the chart is still loading; never overwrites what
+  // the user typed (functional update only fills an empty field).
+  useEffect(() => {
+    if (!open || sourceType !== 'price') {
+      return
+    }
+    let tries = 0
+    const id = window.setInterval(() => {
+      const price = terminal?.getLastPrice?.()
+      tries += 1
+      if (typeof price === 'number' && price > 0) {
+        setValue((prev) => (prev === '' ? String(price) : prev))
+        window.clearInterval(id)
+      } else if (tries > 10) {
+        window.clearInterval(id)
+      }
+    }, 300)
+    return () => window.clearInterval(id)
+  }, [open, sourceType, terminal])
 
   useEffect(() => {
     if (!symbol) {
@@ -415,7 +440,7 @@ function LogsDialog({ alert, onClose }: { alert: Alert | null; onClose: () => vo
 /* Panel                                                                  */
 /* --------------------------------------------------------------------- */
 
-export function AlertPanel({ symbol, interval }: AlertPanelProps) {
+export function AlertPanel({ symbol, interval, terminal }: AlertPanelProps) {
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const [logsAlert, setLogsAlert] = useState<Alert | null>(null)
@@ -553,6 +578,7 @@ export function AlertPanel({ symbol, interval }: AlertPanelProps) {
         onCreated={() => undefined}
         symbol={symbol}
         interval={interval}
+        terminal={terminal}
       />
       <LogsDialog alert={logsAlert} onClose={() => setLogsAlert(null)} />
     </div>
